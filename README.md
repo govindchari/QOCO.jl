@@ -17,10 +17,16 @@ orthant and second-order cones.
 
 ## Installation
 
+`QOCO.jl` is not currently registered in the Julia General registry, so install
+it directly from GitHub:
+
 ```julia
-using Pkg
-Pkg.add("QOCO")
+import Pkg
+Pkg.add(url = "https://github.com/jackyarndley/QOCO.jl.git")
 ```
+
+This also installs the bundled `QOCO_jll` binaries, so you do not need to
+install QOCO separately.
 
 ## Usage with JuMP
 
@@ -47,6 +53,42 @@ import MathOptInterface as MOI
 optimizer = QOCO.Optimizer()
 MOI.set(optimizer, MOI.Silent(), true)
 ```
+
+## MathOptInterface API
+
+The QOCO optimizer supports the following native MathOptInterface objective
+functions and constraint types.
+
+List of supported objective functions:
+
+ * `MOI.ObjectiveFunction{MOI.VariableIndex}`
+ * `MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}`
+ * `MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}`
+
+List of supported constraint types:
+
+ * `MOI.VectorAffineFunction{Float64}` in `MOI.Zeros`
+ * `MOI.VectorAffineFunction{Float64}` in `MOI.Nonnegatives`
+ * `MOI.VectorAffineFunction{Float64}` in `MOI.SecondOrderCone`
+
+JuMP and `MOI.Bridges.full_bridge_optimizer` can bridge many scalar linear
+constraints and bound constraints into these native vector-affine forms.
+
+## Limitations
+
+QOCO is exposed as a one-shot, `copy_to`-based MOI optimizer. Incremental model
+construction is handled by JuMP or an MOI caching optimizer rather than by the
+native solver object itself.
+
+The native interface supports quadratic objectives, but not quadratic
+constraints.
+
+QOCO does not currently provide reliable infeasibility or unboundedness
+certificates through the wrapper, so such models may terminate with iteration or
+numerical-error statuses instead of `MOI.INFEASIBLE` or
+`MOI.DUAL_INFEASIBLE`.
+
+QOCO does not support integer or mixed-integer optimization.
 
 ## Solver Settings
 
@@ -75,7 +117,7 @@ MOI.set(optimizer, MOI.RawOptimizerAttribute("max_iters"), 500)
 | `reltol_inacc`    | Float64 | 1e-5     | Relative tolerance (inaccurate)     |
 | `verbose`         | Bool    | false    | Print solver output                 |
 
-`MOI.Silent()` takes precedence over the raw `verbose` setting. In the MOI and
-JuMP wrappers, QOCO output is enabled by default unless `set_silent(model)` or
-`MOI.set(optimizer, MOI.Silent(), true)` is used. To force quiet output without
-using `Silent`, set `MOI.RawOptimizerAttribute("verbose")` to `false`.
+`MOI.Silent()` takes precedence over the raw `verbose` setting. By default, the
+wrapper uses QOCO's compiled default (`verbose = false`). To enable solver
+output, set `MOI.RawOptimizerAttribute("verbose")` to `true`, or pass
+`verbose = true` to `QOCO.Optimizer`.

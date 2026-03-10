@@ -25,6 +25,77 @@ using JuMP
         @test MOI.get(opt, MOI.Silent()) == true
     end
 
+    @testset "Query surfaces" begin
+        opt = QOCO.Optimizer()
+        model = MOI.Utilities.Model{Float64}()
+        MOI.set(model, MOI.Name(), "query-model")
+        x = MOI.add_variables(model, 2)
+        MOI.set(model, MOI.VariableName(), x[1], "x1")
+        MOI.set(model, MOI.VariableName(), x[2], "x2")
+
+        obj = MOI.ScalarAffineFunction(
+            [
+                MOI.ScalarAffineTerm(1.0, x[1]),
+                MOI.ScalarAffineTerm(2.0, x[2]),
+            ],
+            3.0,
+        )
+        MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
+        MOI.set(model, MOI.ObjectiveFunction{typeof(obj)}(), obj)
+
+        eq_func = MOI.VectorAffineFunction(
+            [
+                MOI.VectorAffineTerm(1, MOI.ScalarAffineTerm(1.0, x[1])),
+                MOI.VectorAffineTerm(1, MOI.ScalarAffineTerm(1.0, x[2])),
+            ],
+            [-1.0],
+        )
+        ci = MOI.add_constraint(model, eq_func, MOI.Zeros(1))
+        MOI.set(model, MOI.ConstraintName(), ci, "eq")
+
+        idxmap = MOI.copy_to(opt, model)
+        mapped_ci = idxmap[ci]
+
+        @test MOI.get(opt, MOI.Name()) == "query-model"
+        @test MOI.Name() in MOI.get(opt, MOI.ListOfModelAttributesSet())
+        @test MOI.ObjectiveSense() in MOI.get(opt, MOI.ListOfModelAttributesSet())
+        @test MOI.ObjectiveFunction{typeof(obj)}() in MOI.get(opt, MOI.ListOfModelAttributesSet())
+        @test MOI.get(opt, MOI.ObjectiveSense()) == MOI.MIN_SENSE
+        @test MOI.get(opt, MOI.ObjectiveFunctionType()) == typeof(obj)
+        @test isapprox(
+            MOI.get(opt, MOI.ObjectiveFunction{typeof(obj)}()),
+            MOI.Utilities.canonical(obj),
+        )
+        @test MOI.get(opt, MOI.VariableName(), idxmap[x[1]]) == "x1"
+        @test MOI.get(opt, MOI.VariableName(), idxmap[x[2]]) == "x2"
+        @test MOI.get(opt, MOI.ConstraintName(), mapped_ci) == "eq"
+        @test MOI.get(opt, MOI.ConstraintSet(), mapped_ci) == MOI.Zeros(1)
+        @test isapprox(
+            MOI.get(opt, MOI.ConstraintFunction(), mapped_ci),
+            MOI.Utilities.canonical(eq_func),
+        )
+        @test MOI.get(opt, MOI.VariableIndex, "x1") == idxmap[x[1]]
+        @test MOI.get(opt, typeof(mapped_ci), "eq") == mapped_ci
+        @test MOI.get(opt, MOI.ConstraintIndex, "eq") == mapped_ci
+        @test MOI.get(opt, MOI.NumberOfVariables()) == 2
+        @test MOI.get(opt, MOI.ListOfVariableIndices()) == [idxmap[x[1]], idxmap[x[2]]]
+        @test MOI.get(opt, MOI.NumberOfConstraints{typeof(eq_func), MOI.Zeros}()) == 1
+        @test MOI.get(opt, MOI.ListOfConstraintIndices{typeof(eq_func), MOI.Zeros}()) == [mapped_ci]
+    end
+
+    @testset "Unsupported direct constraints throw" begin
+        opt = QOCO.Optimizer()
+        model = MOI.Utilities.Model{Float64}()
+        x = MOI.add_variable(model)
+        func = MOI.ScalarAffineFunction([MOI.ScalarAffineTerm(1.0, x)], 0.0)
+        MOI.add_constraint(model, func, MOI.EqualTo(1.0))
+        err = MOI.UnsupportedConstraint{
+            MOI.ScalarAffineFunction{Float64},
+            MOI.EqualTo{Float64},
+        }()
+        @test_throws err MOI.copy_to(opt, model)
+    end
+
     @testset "Simple QP via MOI" begin
         # min (1/2)(2x1^2 + 2x2^2) - x1 - x2
         # s.t. x1 + x2 = 1
@@ -304,6 +375,7 @@ end
                 MOI.ConstraintBasisStatus,
                 MOI.VariableBasisStatus,
                 MOI.ObjectiveBound,
+                MOI.TimeLimitSec,
             ],
         );
         exclude = Any[
@@ -327,12 +399,9 @@ end
             "test_conic_HermitianPositiveSemidefiniteConeTriangle",
             "test_conic_NormCone",
             # No integer support
-            "test_basic_VectorOfVariables_",
             "test_solve_SOS",
             "test_constraint_ZeroOne",
             "test_constraint_Integer",
-            # No incremental interface
-            "test_model_",
             # QOCO doesn't detect infeasibility or unboundedness
             r"test_conic_linear_INFEASIBLE.*",
             "test_conic_NonnegToNonworking",
@@ -347,21 +416,8 @@ end
             r"test_linear_INFEASIBLE.*",
             r"test_linear_DUAL_INFEASIBLE.*",
             "test_unbounded",
-            # No time limit support
-            "test_attribute_TimeLimitSec",
-            # Tests requiring features beyond copy_to
-            "test_modification_",
-            "test_objective_ObjectiveFunction_",
-            "test_variable_",
-            # Constraint query not fully supported
-            "test_constraint_",
-            # Deletion not supported
-            "test_solve_result_index",
             # Quadratic constraints not supported (only quadratic objectives)
             "test_quadratic_constraint_",
-            # Integration tests that require incremental or delete
-            "test_linear_integration_delete_variables",
-            "test_solve_optimize_twice",
         ],
     )
 end
