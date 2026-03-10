@@ -6,7 +6,7 @@ Quadratic Objective Conic Optimizer.
 QOCO solves second-order cone programs (SOCPs) with quadratic objectives of the
 form:
 
-```
+```text
 min   (1/2)x'Px + c'x
 s.t.  Ax = b
       Gx <=_C h
@@ -74,3 +74,8 @@ MOI.set(optimizer, MOI.RawOptimizerAttribute("max_iters"), 500)
 | `abstol_inacc`    | Float64 | 1e-5     | Absolute tolerance (inaccurate)     |
 | `reltol_inacc`    | Float64 | 1e-5     | Relative tolerance (inaccurate)     |
 | `verbose`         | Bool    | false    | Print solver output                 |
+
+`MOI.Silent()` takes precedence over the raw `verbose` setting. In the MOI and
+JuMP wrappers, QOCO output is enabled by default unless `set_silent(model)` or
+`MOI.set(optimizer, MOI.Silent(), true)` is used. To force quiet output without
+using `Silent`, set `MOI.RawOptimizerAttribute("verbose")` to `false`.

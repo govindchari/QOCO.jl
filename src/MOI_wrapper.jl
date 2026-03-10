@@ -202,6 +202,28 @@ function MOI.set(opt::Optimizer, attr::MOI.RawOptimizerAttribute, val)
     return
 end
 
+function _build_settings(opt::Optimizer)
+    settings = default_settings()
+    for (key, val) in opt.settings
+        if key == :verbose
+            continue
+        end
+        setfield!(settings, key, convert(fieldtype(QOCOSettings, key), val))
+    end
+
+    if opt.silent
+        settings.verbose = UInt8(0)
+    elseif haskey(opt.settings, :verbose)
+        settings.verbose = UInt8(opt.settings[:verbose] ? 1 : 0)
+    else
+        # MOI.Silent controls whether solver output is shown. If the user has
+        # not set the raw verbose flag explicitly, default to showing output.
+        settings.verbose = UInt8(1)
+    end
+
+    return settings
+end
+
 # --------------------------------------------------------------------------
 # Supported constraints / objectives
 # --------------------------------------------------------------------------
@@ -639,18 +661,8 @@ function MOI.optimize!(opt::Optimizer)
         return
     end
 
-    # Build settings
-    settings = default_settings()
-    for (key, val) in opt.settings
-        if key == :verbose
-            settings.verbose = UInt8(val ? 1 : 0)
-        else
-            setfield!(settings, key, convert(fieldtype(QOCOSettings, key), val))
-        end
-    end
-    if opt.silent
-        settings.verbose = UInt8(0)
-    end
+    # Build settings. Silent takes precedence over the raw verbose flag.
+    settings = _build_settings(opt)
 
     # Build CSC matrices for C API
     P_csc = QOCOCscMatrix(0, 0, 0, C_NULL, C_NULL, C_NULL)
